@@ -121,8 +121,7 @@ function AuthedApp({ userId, onSwitchProfile }) {
       targets: userData.targets,
       onSave: handleSaveSettings,
       sync,
-      onSyncNow: sync.syncNow,
-      onConnectionsSaved: () => setUserData((prev) => ({ ...prev }))
+      onSyncNow: sync.syncNow
     }),
     mealDetail: h(MealDetail, {
       meal: activeMeal,

@@ -1,9 +1,14 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getNutritionData, isOpenAIConfigured, parseFoodInput } from '../services/openaiService.js';
 
 export const useOpenAI = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [mocked, setMocked] = useState(true);
+
+  useEffect(() => {
+    isOpenAIConfigured().then((configured) => setMocked(!configured));
+  }, []);
 
   const parse = useCallback(async (input) => {
     setLoading(true);
@@ -31,5 +36,5 @@ export const useOpenAI = () => {
     }
   }, []);
 
-  return { parse, lookupNutrition, loading, error, mocked: !isOpenAIConfigured() };
+  return { parse, lookupNutrition, loading, error, mocked };
 };

@@ -99,7 +99,7 @@ export default function AddFood({ onAddMeal }) {
       h(
         'div',
         { className: 'text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-lg p-2' },
-        'OpenAI key not set - using the local food list only. Unrecognized foods get a rough placeholder estimate. Add a key in Settings → Connections to look up and learn new foods automatically.'
+        'Using the local food list only right now - unrecognized foods get a rough placeholder estimate. Ask the app owner to add an OpenAI key in Vercel to enable automatic lookups for new foods.'
       ),
 
     step === 'input' &&

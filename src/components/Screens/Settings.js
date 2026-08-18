@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react';
 import { h, F } from '../../utils/h.js';
 import { calculateMacros } from '../../utils/bmiCalculator.js';
 import { GOAL_OPTIONS } from '../../utils/constants.js';
-import { getConnections, saveConnections } from '../../services/connectionConfig.js';
-import { useToast } from '../Common/Toast.js';
 
 const MACRO_FIELDS = [
   { key: 'calories_daily', label: 'Daily calories', unit: 'kcal' },
@@ -13,12 +11,10 @@ const MACRO_FIELDS = [
   { key: 'fiber_g', label: 'Fiber', unit: 'g' }
 ];
 
-export default function Settings({ profile, targets, onSave, sync, onSyncNow, onConnectionsSaved }) {
+export default function Settings({ profile, targets, onSave, sync, onSyncNow }) {
   const [formData, setFormData] = useState(profile);
   const [calculatedTargets, setCalculatedTargets] = useState(targets);
   const [overrides, setOverrides] = useState(targets.user_overrides || {});
-  const [connections, setConnections] = useState(getConnections());
-  const showToast = useToast();
 
   useEffect(() => {
     const calculated = calculateMacros(
@@ -52,16 +48,6 @@ export default function Settings({ profile, targets, onSave, sync, onSyncNow, on
   const handleSave = () => {
     const finalTargets = { ...calculatedTargets, ...overrides, user_overrides: overrides };
     onSave({ profile: { ...formData, bmi: calculatedTargets.bmi }, targets: finalTargets });
-  };
-
-  const handleConnectionChange = (e) => {
-    setConnections((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  const handleSaveConnections = () => {
-    saveConnections(connections);
-    onConnectionsSaved();
-    showToast('Connections saved', 'success');
   };
 
   const syncLabel = {
@@ -193,95 +179,6 @@ export default function Settings({ profile, targets, onSave, sync, onSyncNow, on
     h(
       'div',
       null,
-      h('h3', { className: 'font-semibold text-sm mb-3' }, 'Connections'),
-      h(
-        'div',
-        { className: 'text-xs text-gray-500 mb-3' },
-        "These are saved only in this browser - never shared with anyone else who opens this app."
-      ),
-      h(
-        'div',
-        { className: 'bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3' },
-        h(
-          'div',
-          null,
-          h('label', { className: 'block text-sm font-medium mb-1' }, 'OpenAI API key'),
-          h('input', {
-            type: 'password',
-            name: 'OPENAI_API_KEY',
-            value: connections.OPENAI_API_KEY,
-            onChange: handleConnectionChange,
-            placeholder: 'sk-... (leave blank to keep using local/mocked data)',
-            className: 'w-full p-2 border rounded-lg text-sm'
-          })
-        ),
-        h(
-          'div',
-          null,
-          h('label', { className: 'block text-sm font-medium mb-1' }, 'GitHub token'),
-          h('input', {
-            type: 'password',
-            name: 'GITHUB_TOKEN',
-            value: connections.GITHUB_TOKEN,
-            onChange: handleConnectionChange,
-            placeholder: 'ghp_...',
-            className: 'w-full p-2 border rounded-lg text-sm'
-          })
-        ),
-        h(
-          'div',
-          { className: 'grid grid-cols-2 gap-3' },
-          h(
-            'div',
-            null,
-            h('label', { className: 'block text-sm font-medium mb-1' }, 'GitHub owner'),
-            h('input', {
-              type: 'text',
-              name: 'GITHUB_OWNER',
-              value: connections.GITHUB_OWNER,
-              onChange: handleConnectionChange,
-              placeholder: 'username',
-              className: 'w-full p-2 border rounded-lg text-sm'
-            })
-          ),
-          h(
-            'div',
-            null,
-            h('label', { className: 'block text-sm font-medium mb-1' }, 'GitHub repo'),
-            h('input', {
-              type: 'text',
-              name: 'GITHUB_REPO',
-              value: connections.GITHUB_REPO,
-              onChange: handleConnectionChange,
-              placeholder: 'family-nutrition',
-              className: 'w-full p-2 border rounded-lg text-sm'
-            })
-          )
-        ),
-        h(
-          'div',
-          null,
-          h('label', { className: 'block text-sm font-medium mb-1' }, 'GitHub branch'),
-          h('input', {
-            type: 'text',
-            name: 'GITHUB_BRANCH',
-            value: connections.GITHUB_BRANCH,
-            onChange: handleConnectionChange,
-            placeholder: 'main',
-            className: 'w-full p-2 border rounded-lg text-sm'
-          })
-        ),
-        h(
-          'button',
-          { onClick: handleSaveConnections, className: 'w-full bg-gray-800 text-white py-2 rounded-lg text-sm font-semibold' },
-          'Save connections'
-        )
-      )
-    ),
-
-    h(
-      'div',
-      null,
       h('h3', { className: 'font-semibold text-sm mb-3' }, 'GitHub Sync'),
       h(
         'div',
@@ -298,7 +195,7 @@ export default function Settings({ profile, targets, onSave, sync, onSyncNow, on
           h(
             'div',
             { className: 'text-xs text-gray-500' },
-            'Fill in the Connections section above, then Save connections.'
+            'The app owner needs to add GITHUB_TOKEN/OWNER/REPO in the Vercel project settings.'
           ),
         h(
           'button',

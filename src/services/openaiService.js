@@ -1,41 +1,15 @@
 import { NUTRITION_DB, NUTRIENT_KEYS, findDbKey, scaleEntry } from './nutritionDB.js';
 import { findCachedKey, getCachedEntry, cacheFood } from './foodCache.js';
-import { getConnections } from './connectionConfig.js';
+import { getServerStatus } from './serverStatus.js';
 import { round2 } from '../utils/format.js';
 
 // Both functions below fall back to deterministic mock/local data whenever
-// no key is set. Add a key via Settings -> Connections and the real fetch
-// path below takes over with no other code changes: unrecognized foods get
-// looked up once via OpenAI, then cached locally (foodCache.js) so the same
-// food never needs a second paid API call.
-export const isOpenAIConfigured = () => Boolean(getConnections().OPENAI_API_KEY);
-
-const SYSTEM_PROMPT_PARSE = `You are a nutrition data validator, not a guesser.
-Your job is to:
-1. Parse food items mentioned, extracting any quantity/weight/volume already stated (e.g. "200ml milk", "2 eggs", "50g paneer")
-2. Only flag an item as ambiguous if its amount genuinely cannot be determined (e.g. "a cup of dal", "some rice") - never ask again when a specific amount/unit was already given
-3. When asking, always ask for a precise amount in grams or milliliters - never vague sizes like "small/medium/large"
-
-Do NOT estimate calories or macros. Your job is to clarify intent only.
-
-Return ONLY valid JSON with no markdown:
-{
-  "parsed_items": [
-    { "item": "milk", "quantity": 200, "amount": { "value": 200, "unit": "ml" }, "confidence": "high" },
-    { "item": "dal", "quantity": 1, "amount": null, "confidence": "low" }
-  ],
-  "ambiguities": [
-    { "item": "dal", "question": "How many grams of dal?", "unit": "g", "placeholder": 200 }
-  ]
-}`;
-
-const SYSTEM_PROMPT_NUTRITION = `You are a nutrition lookup service. Given confirmed food items with amounts, return accurate nutrition data scaled to the stated amount.
-Use USDA FoodData Central estimates. Be conservative - don't inflate numbers.
-
-Return ONLY valid JSON array with no markdown, including all of these nutrient fields for every item:
-[
-  { "food_name": "egg, medium, boiled", "portion": "1 medium (50g)", "calories": 78, "protein_g": 6.3, "carbs_g": 0.6, "fat_g": 5.3, "fiber_g": 0, "calcium_mg": 28, "zinc_mg": 0.6, "iron_mg": 0.9, "magnesium_mg": 5, "potassium_mg": 63, "sodium_mg": 62, "vitamin_d_mcg": 1, "vitamin_b12_mcg": 0.35, "vitamin_c_mg": 0, "folate_mcg": 12, "source": "USDA" }
-]`;
+// the deployed server has no OpenAI key configured (see api/status.js).
+// When it is configured, unrecognized foods get looked up once through the
+// server-side proxy (api/parse-food.js, api/nutrition-lookup.js) - which
+// holds the real key - then cached locally (foodCache.js) so the same food
+// never needs a second call.
+export const isOpenAIConfigured = async () => (await getServerStatus()).openaiConfigured;
 
 const NUMBER_PATTERN = /^(\d+(?:\.\d+)?)\s*(.*)$/;
 // leading word, optional "of", rest is the food name. Trailing group is `*`
@@ -164,34 +138,22 @@ const extractJson = (content, isArray) => {
   return JSON.parse(match[0]);
 };
 
-const callOpenAI = async (systemPrompt, userMessage, maxTokens, temperature) => {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+const callProxy = async (endpoint, body) => {
+  const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getConnections().OPENAI_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
-      temperature,
-      max_tokens: maxTokens
-    })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
   });
-
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error?.message || 'OpenAI API error');
-  return data.choices[0].message.content;
+  if (!response.ok) throw new Error(data.error || 'Server error');
+  return data.content;
 };
 
 export const parseFoodInput = async (userInput) => {
-  if (!isOpenAIConfigured()) {
+  if (!(await isOpenAIConfigured())) {
     return mockParseFoodInput(userInput);
   }
-  const content = await callOpenAI(SYSTEM_PROMPT_PARSE, `Parse this food input: "${userInput}"`, 500, 0.7);
+  const content = await callProxy('/api/parse-food', { userInput });
   return extractJson(content, false);
 };
 
@@ -215,7 +177,7 @@ const learnAndCache = (item, nutrition) => {
 export const getNutritionData = async (foodItems) => {
   const items = foodItems.map((entry) => (typeof entry === 'string' ? { item: entry, quantity: 1, amount: null } : entry));
 
-  if (!isOpenAIConfigured()) {
+  if (!(await isOpenAIConfigured())) {
     return mockGetNutritionData(items);
   }
 
@@ -233,12 +195,7 @@ export const getNutritionData = async (foodItems) => {
   });
 
   if (toFetch.length > 0) {
-    const content = await callOpenAI(
-      SYSTEM_PROMPT_NUTRITION,
-      `Get nutrition for: ${JSON.stringify(toFetch.map((t) => t.item))}`,
-      800,
-      0.5
-    );
+    const content = await callProxy('/api/nutrition-lookup', { items: toFetch.map((t) => t.item) });
     const fetched = extractJson(content, true);
     fetched.forEach((nutrition, i) => {
       const { item, index } = toFetch[i];
